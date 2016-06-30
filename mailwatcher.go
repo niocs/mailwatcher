@@ -108,7 +108,7 @@ func main() {
 	
 
 	// GetMessages() tries to execute the search statement and get a list of messages
-	for c_, ii := range(gs.GetMessages()) {
+	for _, ii := range(gs.GetMessages()) {
 		var tmp string
 		err := db.QueryRow("SELECT messageid FROM mailidx WHERE messageid = ?",ii.GetMessageId()).Scan(&tmp)
 		switch {
