@@ -54,23 +54,24 @@ func loadSqlite(dbpath string) (db *sql.DB) {
 }
 
 var opt = struct {
-	Usage       string    "Prints usage string"
+	Usage       string  "Prints usage string"
+	Verbose     bool    "Prints verbose logs"
 	StartDate   string  "Find emails starting from this date. Default to oldest"
 	EndDate     string  "Find emails upto this date. Default to latest"
-	NewerThanN  string     "Find emails newer than N days"
-	OlderThanN  string     "Find emails older than N days"
-	MaxResults  int64   "Max emails to find. Can be up 500. Defaults to 500|500"
+	NewerThanN  string  "Find emails newer than N days"
+	OlderThanN  string  "Find emails older than N days"
+	MaxResults  int64   "Max emails per page. Can be up 500. Defaults to 50|50"
 	Basedir     string  "Basedir to download emails into. If doesn't exist, will be created"}{}
 
 func PrintUsage(errcode int) {
 	fmt.Println(`
-Usage: mailwatcher  --Basedir      <basedir>    #Download to this dir                                                                                                                                                                          
-                   [--StartDate    <YYYYMMDD>]  #find emails from this date.                                                                                                                                                                   
-                   [--EndDate      <YYYYMMDD>]  #find emails to this date.                                                                                                                                                                     
-                   [--NewerThanN   <N>]         #find emails newer than N days.                                                                                                                                                                
-                   [--OlderThanN   <N>]         #find emails older than N days.                                                                                                                                                                
-                   [--MaxResults   <count>]     #find "count" emails in this run.                                                                                                                                                              
-Use either --StartDate/--EndDate  or  --NewerThanN/--OlderThanN                                                                                                                                                                                
+Usage: mailwatcher  --Basedir      <basedir>    #Download to this dir
+                   [--StartDate    <YYYYMMDD>]  #find emails from this date.
+                   [--EndDate      <YYYYMMDD>]  #find emails to this date.
+                   [--NewerThanN   <N>]         #find emails newer than N days.
+                   [--OlderThanN   <N>]         #find emails older than N days.
+                   [--MaxResults   <count>]     #find "count" emails in this run.
+Use either --StartDate/--EndDate  or  --NewerThanN/--OlderThanN
 `)
 	os.Exit(errcode)
 }
@@ -116,57 +117,71 @@ func main() {
 	
 
 	// GetMessages() tries to execute the search statement and get a list of messages
-	for _, ii := range(gs.GetMessages()) {
-		var tmp string
-		err := db.QueryRow("SELECT messageid FROM mailidx WHERE messageid = ?",ii.GetMessageId()).Scan(&tmp)
-		switch {
-		case err == nil:
-			continue
-		case err != sql.ErrNoRows:
-			log.Fatal(err)
-		}
-		
-		//threadid    := ii.GetThreadId()
-		from        := extractEmail(ii.GetFrom())
-		date        := ii.GetDate().Format("20060102")
-		timestamp   := ii.GetDate().Format("20060102-150405")
-		
-		dir := opt.Basedir + "/" + from + "/" + date
-		os.MkdirAll(dir, 0755)
-		var fp *os.File
-		var fname string
-		var attNames string
-		var ctr = 0
-		for {
-			fname    = fmt.Sprintf("%s/%s.%03d", dir, timestamp, ctr)
-			fp, err = os.OpenFile(fname, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0755)
-			if err == nil {
-				break
+	messagesNextPage := gs.GetMessages()
+	for {
+		for _, ii := range(messagesNextPage) {
+			var tmp string
+			err := db.QueryRow("SELECT messageid FROM mailidx WHERE messageid = ?",ii.GetMessageId()).Scan(&tmp)
+			switch {
+			case err == nil:
+				continue
+			case err != sql.ErrNoRows:
+				log.Fatal(err)
 			}
-			ctr += 1
-			if ctr > 999 {
-				log.Fatal("Can't create file: " + fname + " : " + err.Error() + "\n")
+			
+			//threadid    := ii.GetThreadId()
+			from        := extractEmail(ii.GetFrom())
+			date        := ii.GetDate().Format("20060102")
+			timestamp   := ii.GetDate().Format("20060102-150405")
+			
+			dir := opt.Basedir + "/" + from + "/" + date
+			os.MkdirAll(dir, 0755)
+			var fp *os.File
+			var fname string
+			var attNames string
+			var ctr = 0
+			for {
+				fname    = fmt.Sprintf("%s/%s.%03d", dir, timestamp, ctr)
+				fp, err = os.OpenFile(fname, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0755)
+				if err == nil {
+					break
+				}
+				ctr += 1
+				if ctr > 999 {
+					log.Fatal("Can't create file: " + fname + " : " + err.Error() + "\n")
+				}
+			}
+			if ii.HasBodyText() {
+				fmt.Fprint(fp, string(ii.GetBodyText()))
+			} else if ii.HasBodyHtml() {
+				fmt.Fprint(fp, string(ii.GetBodyHtml()))
+			}
+			fp.Close()
+			if ii.HasAttachments() {
+				attDir := fname + ".d"
+				os.MkdirAll(attDir, 0755)
+				for _, att := range(ii.GetAttachments()) {
+					if len(attNames) > 0 { attNames += ";" }
+					attNames += att.GetFilename()
+					ioutil.WriteFile(attDir + "/" + att.GetFilename(), att.GetData(), 0755)
+				}
+			}
+			_,err = db.Exec("INSERT INTO mailidx VALUES (?,?,?,?,?,?,?,?)",ii.GetMessageId(), ii.GetThreadId(), ii.GetDate().Format("20060102"), ii.GetDate().Format("150405"),ii.GetFrom(),ii.GetSubject(),fname,attNames)
+			if err != nil {
+				log.Fatal(err)
 			}
 		}
-		if ii.HasBodyText() {
-			fmt.Fprint(fp, string(ii.GetBodyText()))
-		} else if ii.HasBodyHtml() {
-			fmt.Fprint(fp, string(ii.GetBodyHtml()))
+		if opt.Verbose {
+			log.Printf("Finished %d emails.\n", gs.GetResultsRecd())
 		}
-		fp.Close()
-		if ii.HasAttachments() {
-			attDir := fname + ".d"
-			os.MkdirAll(attDir, 0755)
-			for _, att := range(ii.GetAttachments()) {
-				if len(attNames) > 0 { attNames += ";" }
-				attNames += att.GetFilename()
-				ioutil.WriteFile(attDir + "/" + att.GetFilename(), att.GetData(), 0755)
-			}
+		if gs.HasNextPage() {
+			if opt.Verbose { log.Printf("Downloading next page.\n") }
+				
+			messagesNextPage = gs.GetMessagesNextPage()
+		} else {
+			if opt.Verbose { log.Printf("No more messages left.\n") }
+			break
 		}
-		_,err = db.Exec("INSERT INTO mailidx VALUES (?,?,?,?,?,?,?,?)",ii.GetMessageId(), ii.GetThreadId(), ii.GetDate().Format("20060102"), ii.GetDate().Format("150405"),ii.GetFrom(),ii.GetSubject(),fname,attNames)
-		if err != nil {
-			log.Fatal(err)
-		}
-		
 	}
+	
 }
