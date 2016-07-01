@@ -63,7 +63,15 @@ var opt = struct {
 	Basedir     string  "Basedir to download emails into. If doesn't exist, will be created"}{}
 
 func PrintUsage(errcode int) {
-	fmt.Println(`Usage: mailwatcher --Basedir <basedir>  etc. and so on and so forth`)
+	fmt.Println(`
+Usage: mailwatcher  --Basedir      <basedir>    #Download to this dir                                                                                                                                                                          
+                   [--StartDate    <YYYYMMDD>]  #find emails from this date.                                                                                                                                                                   
+                   [--EndDate      <YYYYMMDD>]  #find emails to this date.                                                                                                                                                                     
+                   [--NewerThanN   <N>]         #find emails newer than N days.                                                                                                                                                                
+                   [--OlderThanN   <N>]         #find emails older than N days.                                                                                                                                                                
+                   [--MaxResults   <count>]     #find "count" emails in this run.                                                                                                                                                              
+Use either --StartDate/--EndDate  or  --NewerThanN/--OlderThanN                                                                                                                                                                                
+`)
 	os.Exit(errcode)
 }
 
