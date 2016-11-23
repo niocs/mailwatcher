@@ -54,18 +54,21 @@ func loadSqlite(dbpath string) (db *sql.DB) {
 }
 
 var opt = struct {
-	Usage       string  "Prints usage string"
-	Verbose     bool    "Prints verbose logs"
-	StartDate   string  "Find emails starting from this date. Default to oldest"
-	EndDate     string  "Find emails upto this date. Default to latest"
-	NewerThanN  string  "Find emails newer than N days"
-	OlderThanN  string  "Find emails older than N days"
-	MaxResults  int64   "Max emails per page. Can be up 500. Defaults to 50|50"
-	Basedir     string  "Basedir to download emails into. If doesn't exist, will be created"}{}
+	Usage        string  "Prints usage string"
+	Verbose      bool    "Prints verbose logs"
+	StartDate    string  "Find emails starting from this date. Default to oldest"
+	EndDate      string  "Find emails upto this date. Default to latest"
+	NewerThanN   string  "Find emails newer than N days"
+	OlderThanN   string  "Find emails older than N days"
+	MaxResults   int64   "Max emails per page. Can be up 500. Defaults to 50|50"
+	Basedir      string  "Basedir to download emails into. If doesn't exist, will be created"
+	ClientSecret string  "Client secret file path.|client_secret.json"
+}{}
 
 func PrintUsage(errcode int) {
 	fmt.Println(`
 Usage: mailwatcher  --Basedir      <basedir>    #Download to this dir
+                   [--ClientSecret <jsonpath>]  #Client secret file. Default is client_secret.json
                    [--StartDate    <YYYYMMDD>]  #find emails from this date.
                    [--EndDate      <YYYYMMDD>]  #find emails to this date.
                    [--NewerThanN   <N>]         #find emails newer than N days.
@@ -88,7 +91,7 @@ func main() {
 	var gs ezGmail.GmailService
 	// InitSrv() uses client_secret.json to try to get a OAuth 2.0 token,  , if not present already.
 	
-	gs.InitSrv()
+	gs.InitSrv(opt.ClientSecret)
 	db := loadSqlite(opt.Basedir + "/index.sqlite.db")
 	defer db.Close()
 	// We compose a search statement with filter functions
